@@ -12,6 +12,7 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.03	April 9 2014	fixed wrong indexation in Baseline shift part
 5.02	March 7 2014	wAUC calculation fixed
 5.01	March 6 2014	Fixed wrong handling of -HTSX= and -XPLAX options
 
@@ -75,7 +76,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.02"
+#define Version		"5.03"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -545,8 +546,8 @@ AHEAD:
 										v--;
 										if (fixBase) 
 										{
-											HTS[c] -= xWrk;		//fix as base-shift
-											if ( fabs( HTS[c] ) < thresholdHTS )	HTS[c] = 0;
+											HTS[f] -= xWrk;		//fix as base-shift
+											if ( fabs( HTS[f] ) < thresholdHTS )	HTS[f] = 0;
 										}
 										else 
 										{											
