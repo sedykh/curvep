@@ -12,9 +12,13 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
-5.03	April 9 2014	fixed wrong indexation in Baseline shift part
-5.02	March 7 2014	wAUC calculation fixed
-5.01	March 6 2014	Fixed wrong handling of -HTSX= and -XPLAX options
+5.10	April 26 2014	fix for overritten WARNING flags
+						rescue fix for flat curves with low variance and significant signal
+						default for IGNORED_N_USHAPE readjusted to 4
+						
+5.03	April  9 2014	fixed wrong indexation in Baseline shift part
+5.02	March  7 2014	wAUC calculation fixed
+5.01	March  6 2014	Fixed wrong handling of -HTSX= and -XPLAX options
 
 5.00
 		Feb 25 2014		fix with remote folder execution
@@ -76,13 +80,13 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.03"
+#define Version		"5.10"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
 
 
-UNSIGNED_1B_TYPE IGNORED_N_USHAPE = 3,		//for u-shape curves, min.#points to avoid flattening
+UNSIGNED_1B_TYPE IGNORED_N_USHAPE = 4,		//for u-shape curves, min.#points to avoid flattening
 				MIN_N_BASEP = 3;			//min. #baseline points needed to detect baseline shift
 //bool ExtendedMode = false;				//false is temporary, 2013
 bool TrustHighConc = false,				//assume more noise at high conc-s.
@@ -401,15 +405,32 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 					for (; c < f; c++) Baddies.PutInSet(c);
 				}
 			} //if (QQ.stdev(tVals) > alwdDeviation) 
+			else
+			{//04.26.2014 fix
+				xWrk = QQ.meanV(tVals);
+				if (xWrk >= thresholdHTS)
+				{//const curve with low variance and signif signal: can be baseline shift or carry over, do not erase
+					for (c = 0; c < nCols; c++) 
+					{
+						if (Conc[c] == DUMV) continue; 
+						if (fabs(HTS[c] - xWrk) > alwdDeviation) { Baddies.PutInSet(c); HTS[c] = xWrk; }
+					}
+				}
+				goto AHEAD;
+			}
+			
 		}//if (fabs(xRange) < thresholdHTS)
 
 		//Now xRange stores a range of the curve, if < 0 then it's rising
-		if (xRange == 0)	//if still flat, make it so
+		if (xRange == 0)
+		{//if still flat, make it so			
 			for (c = 0; c < nCols; c++) 
 			{
 				if (Conc[c] == DUMV) continue; 
 				if (fabs(HTS[c]) > 0) { Baddies.PutInSet(c); HTS[c] = 0; }
 			}
+			goto AHEAD;
+		}
 		else
 		{//Detect a minimum set of violating points
 			set TrialBest(0, nCols);
@@ -463,7 +484,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				while ( Baddies.IsInSet(++f) );
 				if ( v == INVALID )
 				{
-					if (f < nCols) HTS[c] = HTS[f]; else { Warn = "NO_VALID_POINTS"; HTS[c] = ZERO; }	//all points are invalidated, set to baseline
+					if (f < nCols) HTS[c] = HTS[f]; else { Warn += " NO_VALID_POINTS"; HTS[c] = ZERO; }	//all points are invalidated, set to baseline
 				}
 				else
 				{
@@ -489,7 +510,7 @@ AHEAD:
 			if (Baddies.IsInSet(c)) continue;			
 			v++;
 		}
-		if ((v == 1) && (f > 1)) Warn = "SINGLE_POINT_ACT";
+		if ((v == 1) && (f > 1)) Warn += " SINGLE_POINT_ACT";
 
 		tdff = xRange * fullRange;
 		if (tdff > 0) Warn += " INVERSE";
@@ -515,8 +536,8 @@ AHEAD:
 						if (xWrk < crOver)										
 						{
 							if (xRange == 0)
-							{//constant, likely carryover
-								Warn += " CARRY_OVER";
+							{//constant, likely carryover or baseline shift
+								Warn += " CARRY_OVER? BASE_SHIFT?";
 								while (c <= f) if (Conc[c] == DUMV) c++; else { if (HTS[c] == 0) break; Baddies.PutInSet(c); HTS[c++] = 0; }
 							}
 							else
