@@ -12,6 +12,8 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.12	April 28 2014	fix for the rescue of 5.10 (it can overlook small spikes if overall st.dev is small)
+5.11	April 26 2014	fix help for new USHAPE default
 5.10	April 26 2014	fix for overritten WARNING flags
 						rescue fix for flat curves with low variance and significant signal
 						default for IGNORED_N_USHAPE readjusted to 4
@@ -80,7 +82,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.10"
+#define Version		"5.12"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -415,8 +417,8 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 						if (Conc[c] == DUMV) continue; 
 						if (fabs(HTS[c] - xWrk) > alwdDeviation) { Baddies.PutInSet(c); HTS[c] = xWrk; }
 					}
-				}
-				goto AHEAD;
+					goto AHEAD;
+				}				
 			}
 			
 		}//if (fabs(xRange) < thresholdHTS)
@@ -524,7 +526,7 @@ AHEAD:
 			if (xWrk > 0)
 			{
 					if (tdff > 0)
-					{//decrease in signal, carryover
+					{//decrease in signal, unconditional carryover if inhibitor or potency-conditional if agonist
 						if ( (fullRange < 0) || (xWrk < crOver) )
 						{
 							Warn += " CARRY_OVER";
@@ -579,7 +581,7 @@ AHEAD:
 									}																		
 								}								
 							}
-						}
+						} //if (xWrk < crOver)	
 						else Warn += " TOO_POTENT";					
 			} //if (xWrk > 0)
 		}//if ( (crOver > 0) && (v > 0) )
@@ -726,7 +728,7 @@ int main(int argc, char* argv[])
 		cout << "'-RNG=' max.response <def. " << RANGE << "> (can be positive)" << endl;
 		cout << "'-CRO=' carryover threshold <def. 80% of max.response>, not used if 0" << endl;
 		cout << "'-BLFX' baseline shift correction mode, off by def." << endl;
-		cout << "'-USHAPE=' min.#points for u-shape <def.2>" << endl;
+		cout << "'-USHAPE=' min.#points for u-shape <def.4>" << endl;
 		cout << "'-BSHIFT=' min.#flat points to detect baseline-shift <def.3>" << endl;
 		cout << "'-BYHI','-BYLO'<def> favors corrections based on hi or lo conc-s" << endl;
 		//cout << "'-XTINF' extended output with additional metrics" << endl;
