@@ -12,6 +12,8 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.20	May	  27 2014	fix in condition for calculating advanced indicators (was based on fingerprint > 0, now on Emax > 0)
+
 5.12	April 28 2014	fix for the rescue of 5.10 (it can overlook small spikes if overall st.dev is small)
 5.11	April 26 2014	fix help for new USHAPE default
 5.10	April 26 2014	fix for overritten WARNING flags
@@ -82,7 +84,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.12"
+#define Version		"5.20"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -631,20 +633,21 @@ AHEAD:
 		outHTS << fn << TAB; 		
 		outHTS << (fn ? log10((long double)fn) : -1) << TAB;
 
-		//-------- print C@.. and EC..		
-		if (fn > 0)
-		{//some signal
-			for(Emax = c = 0; c < nCols; c++)
-			{
-				if ( Conc[c] == DUMV) continue;
-				if ( (Emax > HTS[c])^(fullRange > 0) ) Emax= HTS[c];
-			}
+		//-------- print C@.. and EC..	
+		for(Emax = c = 0; c < nCols; c++)
+		{
+			if ( Conc[c] == DUMV) continue;
+			if ( (Emax > HTS[c])^(fullRange > 0) ) Emax= HTS[c];
+		}
+
+		if (fabs(Emax) > 0)
+		{//some signal			
 			slope = Emax/100;
 			xWrk = fabs(slope);
 			for(c = 0; c < rlevels.length(); c++)
 			{
-				CAs[c] = Impute(lgConc, HTS, rlevels[c], DUMV, StrictExtrapolation);
-				ECs[c] = Impute(lgConc, HTS,  xWrk*rlevels[c], DUMV, StrictExtrapolation);
+				CAs[c] = Impute(lgConc, HTS, rlevels[c], DUMV, StrictExtrapolation); //NB: not tied to RANGE, will output estimated C for a given level of response (from 1 to 99)
+				ECs[c] = Impute(lgConc, HTS,  xWrk*rlevels[c], DUMV, StrictExtrapolation); //NB: ECs are tied to max response, not to RANGE
 			}
 			POD = Impute(lgConc, HTS, thresholdHTS, DUMV, StrictExtrapolation);
 			slope *= 50/(ECs[6] - ECs[4]);
