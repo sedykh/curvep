@@ -12,7 +12,8 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
-5.21	May	  28 2014	blip reporting added
+5.21 - 5.22
+		May	  28 2014	blip reporting added
 5.20	May	  27 2014	fix in condition for calculating advanced indicators (was based on fingerprint > 0, now on Emax > 0)
 
 5.12	April 28 2014	fix for the rescue of 5.10 (it can overlook small spikes if overall st.dev is small)
@@ -85,7 +86,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.21"
+#define Version		"5.22"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -348,13 +349,13 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 		c = nCols; while ( Baddies.IsInSet(--c) );
 		xRange = HTS[f] - HTS[c];
 		Warn = "";
-		
+
 		if (fabs(HTS[f]) > 0)
 		{//blips can affect xRange, check next two conc.
 			v = f;
 			while ( Baddies.IsInSet(++v) ); 
 			if (v < nCols) if (HTS[v] == 0) while ( Baddies.IsInSet(++v) );
-			if (v < nCols) if (HTS[v] == 0) { xRange -= HTS[f]; HTS[f] = 0; Warn = "BLIP"; } //erase starting point (likely blip)
+			if (v < nCols) if (HTS[v] == 0) { xRange -= HTS[f]; HTS[f] = 0; Warn = "BLIP"; Baddies.PutInSet(f); } //erase starting point (likely blip)
 		}
 
 		if (fabs(xRange) < thresholdHTS)
