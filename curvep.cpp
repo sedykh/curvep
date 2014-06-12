@@ -12,6 +12,8 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.30	June  11 2014	U-shape detection criteria reworked to allow more corrections in certain cases, added check for partial U-shapes
+
 5.21 - 5.22
 		May	  28 2014	blip reporting added
 5.20	May	  27 2014	fix in condition for calculating advanced indicators (was based on fingerprint > 0, now on Emax > 0)
@@ -86,7 +88,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.22"
+#define Version		"5.30"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -359,60 +361,106 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 		}
 
 		if (fabs(xRange) < thresholdHTS)
-		{//redo the slope-direction analysis differently
-			xRange = 0;		//set the curve type as constant
-			if (QQ.stdev(tVals) > alwdDeviation)
+		//redo the slope-direction analysis differently
+			xRange = 0;
+		else
+		{//check for possible partial U-curve
+			for (c = v = 0; v < tVals.length(); v++) if ( fabs(HTS[f] - tVals[v]) > fabs(xRange) ) c++;
+			if (c < 2) goto RANGE_FOUND; //no problems
+		}
+
+		if (QQ.stdev(tVals) > alwdDeviation)
+		{
+			apvector<SIGNED_2B_TYPE> Ivals(nCols, 0); 	//first interval Ivals[0] is from infinite dilution to the first conc. tested
+			for (xWrk = v = c = 0; c < nCols; c++)
 			{
-				apvector<SIGNED_2B_TYPE> Ivals(nCols, 0); 	//first interval Ivals[0] is fake, it is from infinite dilution to the first conc. tested
-				for (xWrk = v = c = 0; c < nCols; c++)
+				if ( Baddies.IsInSet(c) ) continue;					
+				if (fabs(HTS[c] - xWrk) > alwdDeviation)
 				{
-					if ( Baddies.IsInSet(c) ) continue;					
-					if (fabs(HTS[c] - xWrk) > alwdDeviation)
+					if (HTS[c] < xWrk) { v++; Ivals[c] =  1; } //decreasing
+					if (HTS[c] > xWrk) { v--; Ivals[c] = -1; } //increasing
+				}
+				xWrk = HTS[c];
+			}
+
+			//flat or U-shaped curves					
+			SIGNED_2B_TYPE tf, cP, xP, vP, mP = 0; //work vars and the width of the optimal pivot
+			SIGNED_2B_TYPE errP = nCols, bP = 0; //for optimal pivot, store #corrections and pivot index
+			for (f = 0, c = 1; c < nCols - 1; c++)						
+			{
+				if (Ivals[c] == 0) continue;
+				f += Ivals[c]; v -= Ivals[c];
+				cP = abs(v - f); //reflects the width of the spike as #(non-flat intervals)
+				if (cP < mP) continue;
+				if (cP < IGNORED_N_USHAPE) continue;
+
+				vP = c; //determines pivot
+				xP = 0; //counts corrections (skips continuously monotonic points on the slope of U-shape)					
+				if ( fullRange*(f - v) > 0 )
+				{//hi-lo-hi u-shapes
+					bool flat = false;
+					tf = c;						
+					while (tf-- > 0)
 					{
-						if (HTS[c] < xWrk) { v++; Ivals[c] =  1; } //decreasing
-						if (HTS[c] > xWrk) { v--; Ivals[c] = -1; } //increasing
+						if (Baddies.IsInSet(tf)) continue;
+						if (Ivals[tf] == Ivals[c]) { flat =false; continue; };
+						if ( (Ivals[tf] * Ivals[c]) < 0 ) { xP++; break; } //counter-slop, stop
+						if (flat) { xP +=2; break; } //two flat regions in a row, stop
+						flat = true;
 					}
-					xWrk = HTS[c];
+					xP += tf;
+					while (tf-- > 0) if (Baddies.IsInSet(tf)) xP--;
 				}
-				
-				//flat or U-shaped curves					
-				SIGNED_2B_TYPE cP, xP, vP, mP = 0; //work vars and optimal pivot value
-				SIGNED_2B_TYPE errP = nCols, bP = 0; //for optimal pivot, store #corrections and pivot index
-				for (f = c = 0; c < nCols; c++)						
-				{
-					if (Ivals[c] == 0) continue;
-					f += Ivals[c]; v -= Ivals[c];
-					cP = abs(v) + abs(f); //reflects the width of the spike
-					if (cP < mP) continue;
-					xP = vP = c;
-					if (fullRange*(f - v) > 0)	xP++; 
-					else {	while ((++vP < nCols)&&(Ivals[vP] == 0));	xP = nCols - vP--; }		
-					if ((cP == mP) && (errP < xP)) continue;
-					mP = cP; bP = vP; errP = xP;
-				}					
-				
-				for (xP = vP = v = f = c = 0; c < nCols; c++)
-				{
-					if (Ivals[c] == 0)	continue;
-					if (Ivals[c]*Ivals[f] < 0) v++; //count number of spikes (changes in monotonicity)
-					if (c > bP) vP += Ivals[c]; else xP += Ivals[c];
-					f = c;
+				else 
+				{//lo-hi-lo u-shapes	
+					//move the pivot to the last plateau point
+					while ((++vP < nCols)&&(Ivals[vP] == 0)); 
+					tf = --vP;						
+					while (++tf < nCols)
+					{
+						if (Baddies.IsInSet(tf)) continue;
+						if (HTS[tf] == 0) break;
+					}
+					xP = nCols - tf;						
 				}
-				if ((bP+1) == errP) f = abs(vP); else f = abs(xP);
-				xWrk = fabs(HTS[bP]); if (crOver == 0)  xWrk = -1;
-				if ( (mP < IGNORED_N_USHAPE) || (bP == 0) || (v > mP) || ((f<<1) < IGNORED_N_USHAPE) || ((xWrk < crOver)&&(errP > mP)) )
-				{ Warn = " NOISY"; if (xWrk > crOver) Warn += " CHECK"; }
-				else
-				{//treat U-shape, its pivot-point represents peak/plateau
-					Warn = " U_SHAPE"; if (errP > mP) Warn += " CHECK";
-					if (fullRange > 0) xRange = -1; else xRange = 1;
-					//invalidate wrong part to aid outlier-detection
-					if (++bP == errP) {c = 0; f = bP; v = vP; }	else { c = bP; f = nCols; v = xP; }
-					for (; c < f; c++) Baddies.PutInSet(c);
-				}
-			} //if (QQ.stdev(tVals) > alwdDeviation) 
+
+				//compare pivot with current best
+				if (errP < xP) continue;
+				mP = cP; bP = vP; errP = xP;
+			}					
+			
+			for (xP = vP = v = f = c = 0; c < nCols; c++)
+			{
+				if (Ivals[c] == 0)	continue;
+				if (Ivals[c]*Ivals[f] < 0) v++; //count number of spikes (changes in monotonicity)
+				if (c > bP) vP += Ivals[c]; else xP += Ivals[c];
+				f = c;
+			}
+
+			xWrk = fabs(HTS[bP]); if (crOver == 0)  xWrk = -1;
+			errP -= 2*(mP - IGNORED_N_USHAPE); //allow 2 addl corrections per extra support				
+			if ( (bP == 0) || ( (xWrk < crOver)&&((errP > mP)||(v > mP)) ) )
+			{ Warn = " NOISY"; if (xWrk > crOver) Warn += " POTENT"; }
 			else
-			{//04.26.2014 fix
+			{//treat U-shape, its pivot-point represents peak/plateau
+				Warn = " U_SHAPE"; if (errP > mP) Warn += " CHECK";
+				if (fullRange > 0) xRange = -1; else xRange = 1;
+				//invalidate wrong part to aid outlier-detection
+				bP++;
+				if ( fullRange*(xP - vP) > 0 )
+				{//hi-lo-hi
+					c = 0; f = bP;
+				}	
+				else 
+				{//lo-hi-lo
+					c = bP; f = nCols; 
+				}
+				for (; c < f; c++) Baddies.PutInSet(c);
+			}
+		} //if (QQ.stdev(tVals) > alwdDeviation) 
+		else
+			if (xRange == 0)
+			{
 				xWrk = QQ.meanV(tVals);
 				if (xWrk >= thresholdHTS)
 				{//const curve with low variance and signif signal: can be baseline shift or carry over, do not erase
@@ -422,11 +470,10 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 						if (fabs(HTS[c] - xWrk) > alwdDeviation) { Baddies.PutInSet(c); HTS[c] = xWrk; }
 					}
 					goto AHEAD;
-				}				
+				}
 			}
-			
-		}//if (fabs(xRange) < thresholdHTS)
 
+RANGE_FOUND:
 		//Now xRange stores a range of the curve, if < 0 then it's rising
 		if (xRange == 0)
 		{//if still flat, make it so			
