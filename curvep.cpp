@@ -12,6 +12,10 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.31	Aug	  13 2014	partial U-shape detection fixed:
+						avoided hitting OK curves with small jitter
+						added "PART_U?" flag to dinstinguish from flat "NOISY" curves
+
 5.30	June  11 2014	U-shape detection criteria reworked to allow more corrections in certain cases, added check for partial U-shapes
 
 5.21 - 5.22
@@ -88,7 +92,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.30"
+#define Version		"5.31"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -365,7 +369,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			xRange = 0;
 		else
 		{//check for possible partial U-curve
-			for (c = v = 0; v < tVals.length(); v++) if ( fabs(HTS[f] - tVals[v]) > fabs(xRange) ) c++;
+			for (c = v = 0; v < tVals.length(); v++) if ( fabs(HTS[f] - tVals[v]) > (fabs(xRange) + alwdDeviation) ) c++;
 			if (c < 2) goto RANGE_FOUND; //no problems
 		}
 
@@ -440,7 +444,10 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			xWrk = fabs(HTS[bP]); if (crOver == 0)  xWrk = -1;
 			errP -= 2*(mP - IGNORED_N_USHAPE); //allow 2 addl corrections per extra support				
 			if ( (bP == 0) || ( (xWrk < crOver)&&((errP > mP)||(v > mP)) ) )
-			{ Warn = " NOISY"; if (xWrk > crOver) Warn += " POTENT"; }
+			{ 
+				if (xRange == 0) Warn = "NOISY"; else Warn = "PART_U?";
+				if (xWrk > crOver) Warn += " POTENT"; 
+			}
 			else
 			{//treat U-shape, its pivot-point represents peak/plateau
 				Warn = " U_SHAPE"; if (errP > mP) Warn += " CHECK";
