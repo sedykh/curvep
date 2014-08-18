@@ -12,6 +12,7 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.32	Aug	  18 2014	minor fix in Impute() to return first test conc. as POD for potent inverse curves (was INVALID  before due to last.conc checked first )
 5.31	Aug	  13 2014	partial U-shape detection fixed:
 						avoided hitting OK curves with small jitter
 						added "PART_U?" flag to dinstinguish from flat "NOISY" curves
@@ -92,7 +93,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.31"
+#define Version		"5.32"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -112,9 +113,9 @@ REALNUM_TYPE Impute(apvector<REALNUM_TYPE> &lgC, apvector<REALNUM_TYPE> &V, REAL
 	while ( (lgC[--e] == JUNK) );
 	while (lgC[s] == JUNK) s++;
 	
-	if (fabs(V[e]) < L) if (strict) return JUNK; 	
 	if (fabs(V[s]) >= L) if (strict) return lgC[s];
-
+	if (fabs(V[e]) < L) if (strict) return JUNK;
+	
 	REALNUM_TYPE xT = JUNK;
 	z = s;
 	while (z++ < e)
