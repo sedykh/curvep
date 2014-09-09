@@ -12,6 +12,7 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.33	Sep    9 2014	minor fix for rescuing near-flat but potent curves
 5.32	Aug	  18 2014	minor fix in Impute() to return first test conc. as POD for potent inverse curves (was INVALID  before due to last.conc checked first )
 5.31	Aug	  13 2014	partial U-shape detection fixed:
 						avoided hitting OK curves with small jitter
@@ -93,7 +94,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.32"
+#define Version		"5.33"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -365,7 +366,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			if (v < nCols) if (HTS[v] == 0) { xRange -= HTS[f]; HTS[f] = 0; Warn = "BLIP"; Baddies.PutInSet(f); } //erase starting point (likely blip)
 		}
 
-		if (fabs(xRange) < thresholdHTS)
+		if ( (fabs(xRange) < thresholdHTS) && (max(fabs(HTS[f]), fabs(HTS[c])) < thresholdHTS) )	//second clause added on 09.09.2014 to simplify handling potent curves
 		//redo the slope-direction analysis differently
 			xRange = 0;
 		else
@@ -484,7 +485,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 RANGE_FOUND:
 		//Now xRange stores a range of the curve, if < 0 then it's rising
 		if (xRange == 0)
-		{//if still flat, make it so			
+		{//if still flat, make it so
 			for (c = 0; c < nCols; c++) 
 			{
 				if (Conc[c] == DUMV) continue; 
