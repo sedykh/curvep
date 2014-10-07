@@ -12,6 +12,7 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.34	Oct	   6 2014	minor tweak to save very potent muschroom u shapes __||___
 5.33	Sep    9 2014	minor fix for rescuing near-flat but potent curves
 5.32	Aug	  18 2014	minor fix in Impute() to return first test conc. as POD for potent inverse curves (was INVALID  before due to last.conc checked first )
 5.31	Aug	  13 2014	partial U-shape detection fixed:
@@ -94,7 +95,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.33"
+#define Version		"5.34"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -398,7 +399,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				f += Ivals[c]; v -= Ivals[c];
 				cP = abs(v - f); //reflects the width of the spike as #(non-flat intervals)
 				if (cP < mP) continue;
-				if (cP < IGNORED_N_USHAPE) continue;
+				//if (cP < IGNORED_N_USHAPE) continue;		//skip check as it may be overruled by potency; Oct 6 2014
 
 				vP = c; //determines pivot
 				xP = 0; //counts corrections (skips continuously monotonic points on the slope of U-shape)					
@@ -433,7 +434,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				//compare pivot with current best
 				if (errP < xP) continue;
 				mP = cP; bP = vP; errP = xP;
-			}					
+			} //for c			
 			
 			for (xP = vP = v = f = c = 0; c < nCols; c++)
 			{
