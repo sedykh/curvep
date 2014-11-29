@@ -3,8 +3,8 @@ Console application (Linux, Windows).
 
 Based on dataset-class
 TODO:
-detect baseline for the baselineshift better??
-
+clear single spikes preemptively? i.e. _|_ ?
+detect baseline for the baselineshift better ?
 detect outlier by a consensus of trials? (to see how many times each point get removed, depending on the starting position)
 handle carryovers with decreasing/constant signal in a similar way as with increasing? (i.e. detect minimal conc., and erase before that, not the entire curve)???
 
@@ -12,13 +12,16 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.40	Nov	  28 2014	added rescuing for potent near-constant carryover curves; additional small fixes
+5.35	Oct	   8 2014	reverted back to prevent single potentspikes treated as U-shape  _|_
+5.34	Oct	   6 2014	minor tweak to save very potent muschroom u shapes __||___
 5.33	Sep    9 2014	minor fix for rescuing near-flat but potent curves
 5.32	Aug	  18 2014	minor fix in Impute() to return first test conc. as POD for potent inverse curves (was INVALID  before due to last.conc checked first )
 5.31	Aug	  13 2014	partial U-shape detection fixed:
 						avoided hitting OK curves with small jitter
 						added "PART_U?" flag to dinstinguish from flat "NOISY" curves
 
-5.30	June  11 2014	U-shape detection criteria reworked to allow more corrections in certain cases, added check for partial U-shapes
+5.30	June  11 2014	U-shape detectio n criteria reworked to allow more corrections in certain cases, added check for partial U-shapes
 
 5.21 - 5.22
 		May	  28 2014	blip reporting added
@@ -94,7 +97,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.33"
+#define Version		"5.40"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -366,7 +369,9 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			if (v < nCols) if (HTS[v] == 0) { xRange -= HTS[f]; HTS[f] = 0; Warn = "BLIP"; Baddies.PutInSet(f); } //erase starting point (likely blip)
 		}
 
-		if ( (fabs(xRange) < thresholdHTS) && (max(fabs(HTS[f]), fabs(HTS[c])) < thresholdHTS) )	//second clause added on 09.09.2014 to simplify handling potent curves
+		if ( (fabs(xRange) < thresholdHTS) && 
+			 ((QQ.stdev(tVals) < alwdDeviation) ||						//added on 11.28.2014 for inverse-direction potent curves
+			  (max(fabs(HTS[f]), fabs(HTS[c])) < thresholdHTS)) )	//added on 09.09.2014 to simplify handling potent curves 
 		//redo the slope-direction analysis differently
 			xRange = 0;
 		else
@@ -398,7 +403,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				f += Ivals[c]; v -= Ivals[c];
 				cP = abs(v - f); //reflects the width of the spike as #(non-flat intervals)
 				if (cP < mP) continue;
-				if (cP < IGNORED_N_USHAPE) continue;
+				//if (cP < IGNORED_N_USHAPE) continue;		//skip check as it may be overruled by potency; Oct 6 2014
 
 				vP = c; //determines pivot
 				xP = 0; //counts corrections (skips continuously monotonic points on the slope of U-shape)					
@@ -433,7 +438,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				//compare pivot with current best
 				if (errP < xP) continue;
 				mP = cP; bP = vP; errP = xP;
-			}					
+			} //for c			
 			
 			for (xP = vP = v = f = c = 0; c < nCols; c++)
 			{
@@ -471,7 +476,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			if (xRange == 0)
 			{
 				xWrk = QQ.meanV(tVals);
-				if (xWrk >= thresholdHTS)
+				if (fabs(xWrk) >= thresholdHTS)		//fabs() added on 11.28.2014
 				{//const curve with low variance and signif signal: can be baseline shift or carry over, do not erase
 					for (c = 0; c < nCols; c++) 
 					{
@@ -585,7 +590,7 @@ AHEAD:
 			xWrk = fabs(HTS[c]);						
 			if (xWrk > 0)
 			{
-					if (tdff > 0)
+					if ( (tdff > 0) && (fabs(xRange) > thresholdHTS) ) //second term added on 11.28.2014 to rescue near-constant inhibition assay carryovers
 					{//decrease in signal, unconditional carryover if inhibitor or potency-conditional if agonist
 						if ( (fullRange < 0) || (xWrk < crOver) )
 						{
@@ -594,7 +599,7 @@ AHEAD:
 						}
 						else Warn += " CHECK";
 					}
-					else //increase or constant signal					
+					else //increase or near-constant signal					
 						if (xWrk < crOver)										
 						{
 							if (xRange == 0)
