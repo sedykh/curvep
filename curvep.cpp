@@ -12,7 +12,8 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
-5.40	Nov	  28 2014	added rescuing for potent near-constant carryover curves; additional small fixes
+5.40 - 5.41
+		Nov	28-30 2014	refined handling of complex carryover cases (near-constant, u-shape inversed) + additional small fixes
 5.35	Oct	   8 2014	reverted back to prevent single potentspikes treated as U-shape  _|_
 5.34	Oct	   6 2014	minor tweak to save very potent muschroom u shapes __||___
 5.33	Sep    9 2014	minor fix for rescuing near-flat but potent curves
@@ -97,7 +98,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.40"
+#define Version		"5.41"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -436,7 +437,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				}
 
 				//compare pivot with current best
-				if (errP < xP) continue;
+				if (errP + cP < xP + mP) continue; //compare errors - support
 				mP = cP; bP = vP; errP = xP;
 			} //for c			
 			
@@ -463,7 +464,9 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				bP++;
 				if ( fullRange*(xP - vP) > 0 )
 				{//hi-lo-hi
-					c = 0; f = bP;
+					Warn += " CARRY_OVER";
+					c = 0; f = bP - 1;
+					HTS[f] = 0; //important seed for corrections-to-baseline
 				}	
 				else 
 				{//lo-hi-lo
@@ -587,10 +590,11 @@ AHEAD:
 		{
 			c = 0; while (Conc[c] == DUMV) c++;
 			f = nCols; while ( (Conc[--f] == DUMV) );
-			xWrk = fabs(HTS[c]);						
+			xWrk = fabs(HTS[c]);
+			double cuRange = fabs(HTS[c]-HTS[f]);
 			if (xWrk > 0)
 			{
-					if ( (tdff > 0) && (fabs(xRange) > thresholdHTS) ) //second term added on 11.28.2014 to rescue near-constant inhibition assay carryovers
+					if ( (tdff > 0) && (cuRange >= thresholdHTS) )
 					{//decrease in signal, unconditional carryover if inhibitor or potency-conditional if agonist
 						if ( (fullRange < 0) || (xWrk < crOver) )
 						{
@@ -602,8 +606,8 @@ AHEAD:
 					else //increase or near-constant signal					
 						if (xWrk < crOver)										
 						{
-							if (xRange == 0)
-							{//constant, likely carryover or baseline shift
+							if ( (xRange == 0) || (cuRange < thresholdHTS) )
+							{//constant or nearly so, likely carryover or baseline shift
 								Warn += " CARRY_OVER? BASE_SHIFT?";
 								while (c <= f) if (Conc[c] == DUMV) c++; else { if (HTS[c] == 0) break; Baddies.PutInSet(c); HTS[c++] = 0; }
 							}
@@ -619,7 +623,8 @@ AHEAD:
 									c = tVals.length();
 									tVals.resize( ++c );
 									tVals[c - 1] = HTS[f];
-									if (QQ.stdev(tVals) < alwdDeviation) v = c;									
+									if (QQ.stdev(tVals) < alwdDeviation) v = c;
+									if (v + 3 < c) break; //stop scanning after several violations in a row
 								}
 								tVals.resize( v );
 								if (v < MIN_N_BASEP)
@@ -627,7 +632,8 @@ AHEAD:
 								else
 								{//baseline shift, adjust									
 									Warn += " BASE_SHIFT?";
-									xWrk = QQ.meanV(tVals);									
+									xWrk = QQ.meanV(tVals);
+									xWrk = QQ.middleV(tVals);
 									for (f = 0; f < nCols; f++)
 									{
 										if (Conc[f] == DUMV) continue;
