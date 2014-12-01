@@ -12,8 +12,9 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
-5.40 - 5.41
-		Nov	28-30 2014	refined handling of complex carryover cases (near-constant, u-shape inversed) + additional small fixes
+5.40 - 5.42
+  Nov 28 - Dec 1 2014	refined handling of complex carryover cases (near-constant, u-shape inversed) 
+						stricter handling of potent ushapes; additional small fixes
 5.35	Oct	   8 2014	reverted back to prevent single potentspikes treated as U-shape  _|_
 5.34	Oct	   6 2014	minor tweak to save very potent muschroom u shapes __||___
 5.33	Sep    9 2014	minor fix for rescuing near-flat but potent curves
@@ -98,7 +99,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.41"
+#define Version		"5.42"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -449,7 +450,9 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				f = c;
 			}
 
-			xWrk = fabs(HTS[bP]); if (crOver == 0)  xWrk = -1;
+			xWrk = fabs(HTS[bP]); if (crOver == 0)  xWrk = -1;			
+			if (Ivals[bP] == 0) mP++;
+			if (mP < 3) xWrk = -1; //true spike, disable potency-based rescue
 			errP -= 2*(mP - IGNORED_N_USHAPE); //allow 2 addl corrections per extra support				
 			if ( (bP == 0) || ( (xWrk < crOver)&&((errP > mP)||(v > mP)) ) )
 			{ 
