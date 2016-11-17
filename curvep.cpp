@@ -12,6 +12,10 @@ handle carryovers with decreasing/constant signal in a similar way as with incre
 DONE: 
 
 (history list of recent changes)
+5.43	Nov	16 2016		bug in Impute() for special kinds of U-shaped curves, 
+						whose wrong side is so gradual that it does not get corrected (due to <MXDV). 
+						This shortcuts ECXX imputations. 
+
 5.40 - 5.42
   Nov 28 - Dec 1 2014	refined handling of complex carryover cases (near-constant, u-shape inversed) 
 						stricter handling of potent ushapes; additional small fixes
@@ -99,7 +103,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.42"
+#define Version		"5.43"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -119,8 +123,13 @@ REALNUM_TYPE Impute(apvector<REALNUM_TYPE> &lgC, apvector<REALNUM_TYPE> &V, REAL
 	while ( (lgC[--e] == JUNK) );
 	while (lgC[s] == JUNK) s++;
 	
+	//-- 11.16.2016 this block deals with the rare issue of U-shape curves that have gradually decreasing shoulder detected as plateau (<MXDV decrease)
+	SIGNED_4B_TYPE u = e;
+	while (u > s) if (fabs(V[u-1]) > fabs(V[u])) { u--; continue; } else break;
+	//------
+
 	if (fabs(V[s]) >= L) if (strict) return lgC[s];
-	if (fabs(V[e]) < L) if (strict) return JUNK;
+	if (fabs(V[u]) < L) if (strict) return JUNK;	//11.16.2016 - use to be V[e] instead of V[u]
 	
 	REALNUM_TYPE xT = JUNK;
 	z = s;
