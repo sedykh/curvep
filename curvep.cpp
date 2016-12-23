@@ -6,12 +6,15 @@ TODO:
 clear single spikes preemptively? i.e. _|_ ?
 detect baseline for the baselineshift better ?
 detect outlier by a consensus of trials? (to see how many times each point get removed, depending on the starting position)
-handle carryovers with decreasing/constant signal in a similar way as with increasing? (i.e. detect minimal conc., and erase before that, not the entire curve)???
+handle carry-over's with decreasing/constant signal in a similar way as with increasing? (i.e. detect minimal conc., and erase before that, not the entire curve)???
 
 
 DONE: 
 
 (history list of recent changes)
+5.44	Dec 23 2016		bug in U shape detection (early breakpoint forces inversed U-shape wrongly, and curve gets flat)
+						ushape_2_wauc0.htsx -LOG -THR=10 -CRO=30 -HTSX=lgM -RNG=1000
+
 5.43	Nov	16 2016		bug in Impute() for special kinds of U-shaped curves, 
 						whose wrong side is so gradual that it does not get corrected (due to <MXDV). 
 						This shortcuts ECXX imputations. 
@@ -103,7 +106,7 @@ DONE:
 #include "core.h"
 #include "qsar.h"
 
-#define Version		"5.43"
+#define Version		"5.44"
 #define COMMENT		"#"
 #define	HTS_FILE	".hts"
 #define	HTSX_FILE	".htsx"
@@ -207,7 +210,7 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 			outHTS << "# Baseline shift detection mode is ON" << endl;
 
 		if (!StrictExtrapolation)
-			outHTS << "# Extrapoation mode beyond test conc. range is ON" << endl;
+			outHTS << "# Extrapolation mode beyond test conc. range is ON" << endl;
 
 		outHTS << "# Fill-in for missing  values = " << DUMV << endl;
 		if (AltFingerprint) 
@@ -419,11 +422,18 @@ void handleHTSdata (STRING_TYPE inf, STRING_TYPE outf, STRING_TYPE tag, bool ifS
 				vP = c; //determines pivot
 				xP = 0; //counts corrections (skips continuously monotonic points on the slope of U-shape)					
 				if ( fullRange*(f - v) > 0 )
-				{//hi-lo-hi u-shapes
+				{//hi-lo-hi u-shapes - these should not normally happen!!
+
+					if (f*v >= 0) //12.23.16
+					{//treat as a spurious case, unless wo parts of the curve move clearly in different directions
+						continue;
+					}
+
 					bool flat = false;
 					tf = c;						
-					while (tf-- > 0)
+					while (tf > 0)
 					{
+						tf--; //to avoid adding negative tf into xP at the end of the cycle, 12.23.16
 						if (Baddies.IsInSet(tf)) continue;
 						if (Ivals[tf] == Ivals[c]) { flat =false; continue; };
 						if ( (Ivals[tf] * Ivals[c]) < 0 ) { xP++; break; } //counter-slop, stop
